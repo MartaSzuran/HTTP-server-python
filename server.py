@@ -3,6 +3,7 @@
 import socket
 import sys
 import os
+import mimetypes
 
 
 class TCPServer:
@@ -50,7 +51,8 @@ class TCPServer:
 
 
 class HTTPServer(TCPServer):
-    # dict with status codes {code : reason}
+    """Object takes request from the browser and returns response."""
+    # dictionary with status codes {code : reason}
     status_codes = {200: "OK",
                     404: "Not Found",
                     403: "Forbidden",
@@ -65,7 +67,7 @@ class HTTPServer(TCPServer):
     http_methods = ["GET", "POST"]
 
     def handle_request(self, data_from_browser):
-        # sending response for the request
+        """Function for reading the browser request and return the response."""
         # response example:
         # # HTTP / 1.1 200 OK             # The first line is called the response line
         # # Server: Tornado / 4.3         # Response header
@@ -77,30 +79,28 @@ class HTTPServer(TCPServer):
 
         # read requests method
         request = HTTPRequest(data_from_browser)
-        print(request)
+        # print(request)
 
         # recognise the request method
         if request.method not in self.http_methods:
-            # response body should be the answer
             response_line = self.resp_line(status_code=501)
         elif request.method == "GET":
             response_line = self.resp_line(status_code=200)
         elif request.method == "POST":
             response_line = self.resp_line(status_code=404)
         else:
-            print("Something is wrong with the request method.")
+            print("Unknown request method.")
             sys.exit()
 
+        # response body
+        if request.method == "GET":
+            response_body = self.get_method(request.uri)
+
         # create headers
-        header_lines = self.header_lines()
+        header_lines = self.header_lines(request.uri)
 
         # blank line
         blank_line = self.blank_l()
-
-        # Response body
-        if request.method == "GET":
-            resp = self.get_method(request.uri)
-            response_body = self.r_body(resp)
 
         return b"".join([response_line, header_lines, blank_line, response_body])
 
@@ -111,20 +111,22 @@ class HTTPServer(TCPServer):
             reason = self.status_codes[status_code]
             # example : HTTP / 1.1 200 OK
             response = "HTTP/1.1 %s %s\r\n" % (status_code, reason)
-
         return response.encode()
 
-    # create headers
-    def header_lines(self, extra_headers=None):
-        """Create headers. For any different type of content,
-        I can create extra headers for adding it to the massage."""
+    def header_lines(self, file_extension_from_uri):
+        """Return response headers, check content type, if argument is not Null,
+        change content type and return requested one."""
 
         # create local copy of headers for adding any additional once
         headers_copy = self.headers.copy()
 
-        # if there are any extra add it to the dict
-        if extra_headers:
-            headers_copy.update(extra_headers)
+        # find our requested content type
+        # using mimetypes.guess_type - it returns tuple - tuple[0] = content type / tuple[1] = encoding
+        current_content_type = mimetypes.guess_type(file_extension_from_uri)[0] or "text/html"
+        print(current_content_type)
+
+        # set proper content type
+        headers_copy["Content-Type"] = current_content_type
 
         # create an empty string for adding headers
         headers = ""
@@ -135,43 +137,37 @@ class HTTPServer(TCPServer):
         # call encode to convert string to bytes
         return headers.encode()
 
-    # blank line
     def blank_l(self):
+        """Returns binary black line \r\n"""
         blank = b"\r\n"
         return blank
 
-    # response body
-    def r_body(self, resp):
-        if resp:
-            resp_body = b"".join([resp])
-        else:
-            resp_body = b"There is nothing..."
-        return resp_body
-
     def get_method(self, uri):
+        """Check if requested URI exists, returns html file in binary."""
         # add uri to the file path
         if uri == "/":
+            # if bare slash and index.html to the file path
             uri_req = "/index.html"
             path_to_get_req = self.html_path + uri_req
         else:
             path_to_get_req = self.html_path + uri
 
         # check if requested path exists
-        # if it does open and read
         if os.path.exists(path_to_get_req):
+            # if it does open and read in binary
             with open(path_to_get_req, "rb") as f:
                 uri_response = f.read()
         else:
+            # else open not_found.html
             uri_req = "/templates/not_found.html"
             path_to_get_req = self.html_path + uri_req
             with open(path_to_get_req, "rb") as f:
                 uri_response = f.read()
-
         return uri_response
 
 
 class HTTPRequest:
-    """Class for grabbing HTTP request"""
+    """Class for grabbing HTTP request."""
     # taking specific first line elements
     # f.e. : GET /index.html HTTP/1.1
     # GET           - method - Method tells the server what action the client wants to perform on the URI
@@ -185,30 +181,35 @@ class HTTPRequest:
     #                              headers follow after this line.
 
     def __init__(self, data):
+        # set method, uri and http_ver to None then with function reading_request set their values
         self.method = None
         self.uri = None
         self.http_ver = None
 
+        # read the first line from the browser request and set the method, uri and http_ver values
         self.reading_request(data)
 
     def __str__(self):
         return str(self.method) + " " + str(self.uri) + " " + str(self.http_ver)
 
     def reading_request(self, data):
-        """Read the first line from the request"""
-        # first need to decode request
+        """Read the first line from the request and it as a string list."""
+        # create local variable to store browser request
         request = data
 
+        # take first line from the browser request
         req_first_line = self.first_line(request)
+        # print(req_first_line)
 
+        # list of strings from the first line of the browser request
         words_list = self.separate(req_first_line)
         self.method = words_list[0]
         self.uri = words_list[1]
         self.http_ver = words_list[2]
         return words_list
 
-    # taking first line
     def first_line(self, req):
+        """Take first line from the request."""
         # create empty string for first line from the request
         first_l = ""
         for letter in req:
@@ -219,9 +220,8 @@ class HTTPRequest:
                 first_l += letter
         return first_l
 
-    # separate first line content
     def separate(self, r_f_l):
-        """create the list with separate words from request first line"""
+        """Create the list with separate words from request first line."""
+        # separate first line content using split function
         words = r_f_l.split()
         return words
-

@@ -7,7 +7,7 @@ import os
 # take first argument and if there is none given give an error and exit
 try:
     path_to_html_files = sys.argv[1]
-    print(path_to_html_files)
+    # print(path_to_html_files)
 except IndexError:
     print("Path to html files is required!")
     sys.exit()
