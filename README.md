@@ -19,7 +19,6 @@ Example directory:
     see.jpg
   templates:
     about.html
-    info.html
     page_not_found.html
   index.html
   main.py
